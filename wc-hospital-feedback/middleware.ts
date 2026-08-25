@@ -59,7 +59,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // Protect admin routes
-  if (pathname.startsWith('/admin') && !user) {
+  if (pathname.startsWith('/admin') && pathname !== '/admin/feedback' && !user) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
