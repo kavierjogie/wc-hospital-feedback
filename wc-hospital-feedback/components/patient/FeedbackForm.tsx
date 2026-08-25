@@ -68,7 +68,8 @@ export default function FeedbackForm({ hospitals }: Props) {
       }
 
       router.push('/feedback/success')
-    } catch {
+    } catch (err) {
+      console.error('[Client] feedback submit unexpected error:', err)
       setServerError('Network error. Please check your connection and try again.')
       setLoading(false)
     }

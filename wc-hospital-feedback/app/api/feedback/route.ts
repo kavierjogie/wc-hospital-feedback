@@ -56,12 +56,18 @@ export async function POST(req: NextRequest) {
 
     if (insertErr) {
       console.error('[API] feedback insert error:', insertErr)
-      return NextResponse.json({ error: 'Failed to save feedback' }, { status: 500 })
+      return NextResponse.json(
+        {
+          error: `Failed to save feedback: ${insertErr.message} (code: ${insertErr.code}, details: ${insertErr.details || 'none'}, hint: ${insertErr.hint || 'none'})`
+        },
+        { status: 500 }
+      )
     }
 
     return NextResponse.json({ success: true, id: feedback.id }, { status: 201 })
   } catch (err) {
     console.error('[API] feedback unexpected error:', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    const errMsg = err instanceof Error ? err.message : String(err)
+    return NextResponse.json({ error: `Internal server error: ${errMsg}` }, { status: 500 })
   }
 }
