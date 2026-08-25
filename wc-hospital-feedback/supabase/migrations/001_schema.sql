@@ -65,6 +65,21 @@ CREATE INDEX IF NOT EXISTS idx_feedback_hospital_id  ON public.feedback(hospital
 CREATE INDEX IF NOT EXISTS idx_feedback_created_at   ON public.feedback(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_feedback_sentiment    ON public.feedback(sentiment);
 
+-- ── Helper Functions ──────────────────────────────────────
+
+-- Create security definer helper function to check admin role safely.
+-- Because it runs as SECURITY DEFINER, it executes with the privileges
+-- of the creator (db superuser), bypassing RLS and avoiding recursion.
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS BOOLEAN AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE id = auth.uid() AND role = 'admin'
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
 -- ── Row Level Security ────────────────────────────────────
 
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
@@ -83,12 +98,7 @@ CREATE POLICY "Users can update own profile"
 -- profiles: admins can view all
 CREATE POLICY "Admins can view all profiles"
   ON public.profiles FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.profiles
-      WHERE id = auth.uid() AND role = 'admin'
-    )
-  );
+  USING (public.is_admin());
 
 -- hospitals: everyone authenticated can read
 CREATE POLICY "Authenticated users can view hospitals"
@@ -114,9 +124,4 @@ CREATE POLICY "Patients can view own feedback"
 -- feedback: admins can view all
 CREATE POLICY "Admins can view all feedback"
   ON public.feedback FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.profiles
-      WHERE id = auth.uid() AND role = 'admin'
-    )
-  );
+  USING (public.is_admin());
