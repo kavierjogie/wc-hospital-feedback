@@ -6,8 +6,8 @@
 
 @layer base {
   :root {
-    --background: #f8fafc;
-    --foreground: #102a43;
+    --background: #f4f9fc;
+    --foreground: #0f172a;
   }
 
   * {
@@ -29,11 +29,11 @@
 
 @layer components {
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg bg-gov-700 text-white font-medium text-sm hover:bg-gov-800 focus:outline-none focus:ring-2 focus:ring-gov-500 focus:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg bg-brand-500 text-white font-medium text-sm hover:bg-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md hover:scale-[1.01] active:scale-[0.99];
   }
 
   .btn-secondary {
-    @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg bg-white text-gov-700 font-medium text-sm border border-gov-200 hover:bg-gov-50 focus:outline-none focus:ring-2 focus:ring-gov-500 focus:ring-offset-2 transition-colors disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg bg-white text-gov-800 font-medium text-sm border border-gov-200 hover:bg-gov-50 focus:outline-none focus:ring-2 focus:ring-gov-400 focus:ring-offset-2 transition-all disabled:opacity-50 shadow-sm hover:shadow hover:scale-[1.01] active:scale-[0.99];
   }
 
   .btn-danger {
@@ -60,3 +60,30 @@
     @apply text-red-600 text-xs mt-1 flex items-center gap-1;
   }
 }
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+.animate-float {
+  animation: float 4s ease-in-out infinite;
+}
+
+@keyframes pulseSlow {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.95;
+  }
+}
+
+.animate-pulse-slow {
+  animation: pulseSlow 6s ease-in-out infinite;
+}
+

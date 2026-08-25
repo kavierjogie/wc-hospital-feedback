@@ -122,7 +122,7 @@ export async function generatePDFReport(
   const margin = 15
 
   // ── Header ──────────────────────────────────────────────────────────────
-  doc.setFillColor(16, 42, 67) // gov-900
+  doc.setFillColor(15, 23, 42) // gov-900 (deep indigo)
   doc.rect(0, 0, pageWidth, 28, 'F')
   doc.setTextColor(255, 255, 255)
   doc.setFontSize(14)
@@ -140,7 +140,7 @@ export async function generatePDFReport(
   let y = 38
 
   // ── Executive Summary ──────────────────────────────────────────────────
-  doc.setTextColor(16, 42, 67)
+  doc.setTextColor(15, 23, 42)
   doc.setFontSize(12)
   doc.setFont('helvetica', 'bold')
   doc.text('Executive Summary', margin, y)
@@ -178,7 +178,7 @@ export async function generatePDFReport(
     }
 
     // Hospital header bar
-    doc.setFillColor(72, 101, 129) // gov-600
+    doc.setFillColor(13, 148, 136) // brand-600 (surgical teal)
     doc.rect(margin, y, pageWidth - margin * 2, 8, 'F')
     doc.setTextColor(255, 255, 255)
     doc.setFontSize(10)
@@ -209,7 +209,7 @@ export async function generatePDFReport(
 
     // Top issues table
     if (h.top_issues.length > 0) {
-      doc.setTextColor(16, 42, 67)
+      doc.setTextColor(15, 23, 42)
       doc.setFont('helvetica', 'bold')
       doc.setFontSize(8)
       doc.text('Top Issues', margin, y)
@@ -221,7 +221,7 @@ export async function generatePDFReport(
         body: h.top_issues.map((i) => [i.issue, i.count]),
         theme: 'striped',
         styles: { fontSize: 8, cellPadding: 2 },
-        headStyles: { fillColor: [16, 42, 67], textColor: 255 },
+        headStyles: { fillColor: [15, 23, 42], textColor: 255 },
         columnStyles: { 1: { halign: 'center', cellWidth: 20 } },
         margin: { left: margin, right: margin },
       })
@@ -233,7 +233,7 @@ export async function generatePDFReport(
     if (h.sample_feedback.length > 0) {
       if (y > 240) { doc.addPage(); y = 20 }
 
-      doc.setTextColor(16, 42, 67)
+      doc.setTextColor(15, 23, 42)
       doc.setFont('helvetica', 'bold')
       doc.setFontSize(8)
       doc.text('Representative Feedback (anonymised)', margin, y)
@@ -245,7 +245,7 @@ export async function generatePDFReport(
         body: h.sample_feedback.map((f) => [f.category, f.sentiment, f.comment]),
         theme: 'plain',
         styles: { fontSize: 7.5, cellPadding: 2, overflow: 'linebreak' },
-        headStyles: { fillColor: [188, 204, 220], textColor: 30, fontStyle: 'bold' },
+        headStyles: { fillColor: [204, 251, 241], textColor: 30, fontStyle: 'bold' },
         columnStyles: {
           0: { cellWidth: 28 },
           1: { cellWidth: 20 },

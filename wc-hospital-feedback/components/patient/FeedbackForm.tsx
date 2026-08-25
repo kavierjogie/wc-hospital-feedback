@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { AlertCircle, Send, Info } from 'lucide-react'
+import { AlertCircle, Send, Info, Sparkles, HeartHandshake, Clock, Activity, Building2, HelpCircle } from 'lucide-react'
 import type { Hospital, FeedbackCategory } from '@/types/database'
 import { cn } from '@/lib/utils'
 
@@ -14,6 +14,33 @@ const CATEGORIES: FeedbackCategory[] = [
   'Facilities',
   'Other',
 ]
+
+const CATEGORY_DETAILS: Record<FeedbackCategory, { icon: React.ComponentType<any>; desc: string }> = {
+  'Cleanliness': {
+    icon: Sparkles,
+    desc: 'Hygiene of rooms, wards, and bathrooms.'
+  },
+  'Staff Behaviour': {
+    icon: HeartHandshake,
+    desc: 'Friendliness, care, and behavior of the staff.'
+  },
+  'Waiting Time': {
+    icon: Clock,
+    desc: 'Queue delays, waiting times, and appointments.'
+  },
+  'Service': {
+    icon: Activity,
+    desc: 'Quality of medical care and clinical attention.'
+  },
+  'Facilities': {
+    icon: Building2,
+    desc: 'State of equipment, beds, and building condition.'
+  },
+  'Other': {
+    icon: HelpCircle,
+    desc: 'General inquiries or other issues not listed.'
+  }
+}
 
 interface Props {
   hospitals: Pick<Hospital, 'id' | 'name' | 'district'>[]
@@ -115,28 +142,40 @@ export default function FeedbackForm({ hospitals }: Props) {
 
         {/* Category */}
         <div className="p-6">
-          <p className="label">
+          <p className="label mb-3">
             Category <span className="text-red-500">*</span>
           </p>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-            {CATEGORIES.map((cat) => (
-              <button
-                key={cat}
-                type="button"
-                onClick={() => setCategory(cat)}
-                className={cn(
-                  'px-3 py-2.5 rounded-lg border text-sm font-medium text-left transition-all',
-                  category === cat
-                    ? 'border-gov-600 bg-gov-50 text-gov-800 ring-2 ring-gov-300'
-                    : 'border-gray-200 bg-white text-gray-700 hover:border-gov-300 hover:bg-gov-50'
-                )}
-              >
-                {cat}
-              </button>
-            ))}
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5">
+            {CATEGORIES.map((cat) => {
+              const details = CATEGORY_DETAILS[cat]
+              const Icon = details.icon
+              const isSelected = category === cat
+              return (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => setCategory(cat)}
+                  className={cn(
+                    'flex flex-col items-start p-4 rounded-xl border text-left transition-all duration-300 hover:scale-[1.03] hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2',
+                    isSelected
+                      ? 'border-brand-500 bg-brand-50/50 ring-2 ring-brand-300/40 text-gov-900 shadow-sm'
+                      : 'border-gray-200 bg-white text-gray-700 hover:border-brand-300 hover:bg-brand-50/10'
+                  )}
+                >
+                  <div className={cn(
+                    'w-9 h-9 rounded-lg flex items-center justify-center mb-3 transition-colors',
+                    isSelected ? 'bg-brand-500 text-white shadow-sm shadow-brand-500/25' : 'bg-gov-50 text-gov-700'
+                  )}>
+                    <Icon className="w-5 h-5" />
+                  </div>
+                  <span className="font-semibold text-sm block mb-1 text-gov-900">{cat}</span>
+                  <span className="text-xs text-gray-500 leading-normal">{details.desc}</span>
+                </button>
+              )
+            })}
           </div>
           {fieldErrors.category && (
-            <p className="error-msg mt-2"><AlertCircle className="w-3 h-3" />{fieldErrors.category}</p>
+            <p className="error-msg mt-3"><AlertCircle className="w-3.5 h-3.5" />{fieldErrors.category}</p>
           )}
         </div>
 

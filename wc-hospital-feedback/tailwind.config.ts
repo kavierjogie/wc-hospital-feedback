@@ -10,28 +10,28 @@ const config: Config = {
     extend: {
       colors: {
         gov: {
-          50:  '#f0f4f8',
-          100: '#d9e2ec',
-          200: '#bcccdc',
-          300: '#9fb3c8',
-          400: '#829ab1',
-          500: '#627d98',
-          600: '#486581',
-          700: '#334e68',
-          800: '#243b53',
-          900: '#102a43',
+          50:  '#f0f9ff', // soft ice-blue
+          100: '#e0f2fe',
+          200: '#bae6fd',
+          300: '#7dd3fc',
+          400: '#38bdf8',
+          500: '#0ea5e9',
+          600: '#2563eb',
+          700: '#1d4ed8',
+          800: '#1e293b',
+          900: '#0f172a', // deep indigo base
         },
         brand: {
-          50:  '#fff8ed',
-          100: '#ffeece',
-          200: '#fdd89a',
-          300: '#fcba53',
-          400: '#fb9a2b',
-          500: '#f97b0b',
-          600: '#ea5d06',
-          700: '#c24108',
-          800: '#9a330f',
-          900: '#7c2c10',
+          50:  '#f0fdfa', // soft mint background
+          100: '#ccfbf1',
+          200: '#99f6e4',
+          300: '#5eead4',
+          400: '#0d9488', // vibrant surgical teal
+          500: '#0d9488', // surgical teal accent base
+          600: '#0f766e',
+          700: '#115e59',
+          800: '#134e4a',
+          900: '#042f2e',
         },
       },
       fontFamily: {
