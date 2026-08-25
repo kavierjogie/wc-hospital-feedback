@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import HospitalFilter from '@/components/admin/HospitalFilter'
+import MonthFilter from '@/components/admin/MonthFilter'
 import FeedbackTable from '@/components/admin/FeedbackTable'
 import { MessageSquare, AlertTriangle, RefreshCw, LayoutDashboard } from 'lucide-react'
 import Link from 'next/link'
@@ -93,26 +94,10 @@ export default async function AdminFeedbackPage({
           />
 
           {/* Month filter */}
-          <div className="flex items-center gap-2">
-            <label htmlFor="month-filter" className="text-xs text-gray-500">Month:</label>
-            <form method="GET">
-              {searchParams?.hospital && (
-                <input type="hidden" name="hospital" value={searchParams.hospital} />
-              )}
-              <select
-                id="month-filter"
-                name="month"
-                defaultValue={searchParams?.month ?? ''}
-                className="input text-sm py-1.5 w-auto"
-                onChange={(e) => (e.target.form as HTMLFormElement).submit()}
-              >
-                <option value="">All months</option>
-                {monthOptions.map((m) => (
-                  <option key={m.value} value={m.value}>{m.label}</option>
-                ))}
-              </select>
-            </form>
-          </div>
+          <MonthFilter
+            months={monthOptions}
+            selectedMonth={searchParams?.month}
+          />
         </div>
 
         {/* Table */}
