@@ -38,6 +38,8 @@ export async function POST(req: NextRequest) {
 
     // AI analysis (server-side only — Groq key never leaves the server)
     const analysis = await analyzeFeedback(comment, category)
+    const sentiment = analysis?.sentiment ?? 'failed'
+    console.debug('[API] Final sentiment being sent to Supabase', { sentiment })
 
     // Store feedback (store regardless of AI analysis success)
     const { data: feedback, error: insertErr } = await supabase
@@ -47,7 +49,7 @@ export async function POST(req: NextRequest) {
         hospital_id,
         category,
         comment,
-        sentiment: analysis?.sentiment ?? 'failed',
+        sentiment,
         issue: analysis?.issue ?? null,
         ai_summary: analysis?.summary ?? null,
       })

@@ -56,31 +56,51 @@ Rules:
         max_tokens: 200,
       }, { signal: controller.signal })
       clearTimeout(timeout)
+      console.debug('[AI] Groq request succeeded', { status: 200, attempt })
 
       const raw = completion.choices[0]?.message?.content?.trim()
       if (!raw) throw new Error('Groq returned an empty response.')
 
+      console.debug('[AI] Groq raw response', { response: raw })
       const cleaned = raw.replace(/```json|```/g, '').trim()
-      const parsed = JSON.parse(cleaned) as AIAnalysis
+      const parsed = JSON.parse(cleaned) as Partial<AIAnalysis>
+      console.debug('[AI] Parsed Groq response', { response: parsed })
+      const sentiment = typeof parsed.sentiment === 'string'
+        ? parsed.sentiment.trim().toLowerCase()
+        : ''
+      const normalized: AIAnalysis = {
+        sentiment: sentiment === 'positive'
+          ? 'Positive'
+          : sentiment === 'negative'
+            ? 'Negative'
+            : 'Neutral',
+        issue: parsed.issue ?? '',
+        summary: parsed.summary ?? '',
+      }
 
       if (
-        !['Positive', 'Negative', 'Neutral'].includes(parsed.sentiment) ||
-        !parsed.issue ||
-        !parsed.summary
+        !['positive', 'negative', 'neutral'].includes(sentiment) ||
+        !normalized.issue ||
+        !normalized.summary
       ) {
         throw new Error('Groq returned an invalid analysis payload.')
       }
 
-      return parsed
+      console.debug('[AI] Final sentiment returned from analysis', { sentiment: normalized.sentiment })
+      return normalized
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      console.error(`[AI] Groq analysis attempt ${attempt}/${MAX_ANALYSIS_ATTEMPTS} failed: ${message}`)
+      const status = typeof error === 'object' && error !== null && 'status' in error
+        ? (error as { status?: number }).status
+        : undefined
+      console.error(`[AI] Groq analysis attempt ${attempt}/${MAX_ANALYSIS_ATTEMPTS} failed`, { message, status })
       if (attempt === MAX_ANALYSIS_ATTEMPTS || !isRetryableError(error)) break
       await new Promise((resolve) => setTimeout(resolve, 500 * attempt))
     }
   }
 
   console.error('[AI] Groq analysis failed after all attempts; using fallback status.')
+  console.debug('[AI] Final sentiment returned from analysis', { sentiment: null })
   return null
 }
 
