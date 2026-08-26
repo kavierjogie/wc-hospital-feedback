@@ -11,7 +11,7 @@ A production-ready, security-hardened web application designed for the Western C
 - [System Architecture](#system-architecture)
 - [Database Schema & Security (RLS)](#database-schema--security-rls)
 - [AI Analysis & Graceful Degradation](#ai-analysis--graceful-degradation)
-- [Report Generation & Automated Cron Jobs](#report-generation--automated-cron-jobs)
+- [Report Generation & Automated Processing](#report-generation--automated-processing)
 - [Quick Start Guide](#quick-start-guide)
 - [Administrative Page Diagnostics](#administrative-page-diagnostics)
 - [Troubleshooting & Maintenance](#troubleshooting--maintenance)
@@ -28,8 +28,9 @@ A production-ready, security-hardened web application designed for the Western C
 
 - **Real-Time AI Processing**
   - Server-side analysis of patient comments using Groq Cloud API.
-  - Instantly determines sentiment, extracts a clean, high-level issue classification, and writes a concise summary.
-  - Graceful fallback: If AI fails or rate limits are reached, the system saves feedback successfully with a `pending` status.
+  - Determines sentiment, extracts a concise issue classification, and writes a short summary from a structured JSON response.
+  - Configurable model fallback through `GROQ_MODELS`, with up to three attempts per model and a 15-second request timeout.
+  - Graceful fallback: If AI is unavailable, the system saves feedback successfully with a `pending` status for later processing.
 
 - **Admin Analytics Dashboard**
   - Overall key performance indicators (KPIs) showing submission volume, positive/negative/neutral ratios, and trends.
@@ -43,8 +44,12 @@ A production-ready, security-hardened web application designed for the Western C
 
 - **Anonymized Monthly PDF Reports**
   - Generates polished, government-compliant PDF summaries using `jsPDF` and `jspdf-autotable`.
-  - Compiles monthly stats, AI-synthesized summaries per facility, top issues, and anonymized sample feedback comments (ensuring full POPIA compliance).
-  - Features automated monthly cron job execution (Vercel Cron) and email delivery via Resend API.
+  - Compiles monthly stats, AI-synthesized summaries per facility, top issues, and anonymized sample feedback comments (supporting POPIA compliance).
+  - Admins can generate and download reports for the selected month from the reports page.
+
+- **Automated Pending-Feedback Processing**
+  - A Vercel Cron job runs daily at 02:00 and processes up to 25 feedback records with `pending` sentiment.
+  - The cron endpoint is protected with `CRON_SECRET` and reports processed and failed record counts.
 
 ---
 
@@ -61,7 +66,6 @@ A production-ready, security-hardened web application designed for the Western C
 | **PDF Processing** | jsPDF + jspdf-autotable | Dynamic client/server PDF generation with strict formatting. |
 | **Styling & Assets** | Tailwind CSS + Lucide Icons | Clean modern design matching Western Cape branding guidelines. |
 | **Validation** | Zod | Server-side and client-side data schema validation. |
-| **Email Gateway** | Resend API | Automated report delivery with PDF attachments. |
 
 ---
 
@@ -76,10 +80,10 @@ graph TD
     Admin_Pages -->|Query Stats & Feedback| DB
     Admin_Pages -->|Trigger Manual PDF| API_Report[API Route: /api/reports/generate]
     API_Report -->|Generate PDF| PDF_Service[Report Service: jsPDF]
-    Vercel_Cron[Vercel Cron Job] -->|Monthly GET| API_Cron[API Route: /api/cron/monthly-report]
-    API_Cron -->|Aggregate Stats| DB
-    API_Cron -->|Generate PDF| PDF_Service
-    API_Cron -->|Send PDF Attachment| Resend[Resend Email Service]
+    Vercel_Cron[Vercel Cron Job] -->|Daily GET| API_Cron[API Route: /api/cron/process-feedback]
+    API_Cron -->|Load pending feedback| DB
+    API_Cron -->|Analyze with fallback models| Groq
+    API_Cron -->|Save analysis| DB
 ```
 
 ---
@@ -129,21 +133,25 @@ A common pitfall in Supabase is RLS policy recursion, which occurs when a policy
 AI processing runs entirely **server-side** inside the `/api/feedback` route, ensuring `GROQ_API_KEY` is never exposed in client bundles.
 
 1. **Prompt Engineering & Output Validation**
-   The system supplies the patient's comment and category to Groq, demanding a structured JSON response specifying `sentiment` (restricted to `Positive`, `Negative`, `Neutral`), a 5-word `issue` classification, and a 25-word `summary`. Server-side validation parses, strips markdown fences, and verifies this structure.
-2. **Graceful Degradation Engine**
+  The system supplies the patient's comment and category to Groq, requesting a structured JSON response specifying `sentiment` (`Positive`, `Negative`, or `Neutral`), an issue classification of up to five words, and a summary of up to 25 words. Server-side parsing accepts fenced or embedded JSON, normalizes sentiment casing, and rejects incomplete payloads.
+2. **Model Fallback and Retries**
+  Models are tried in the order configured in `GROQ_MODELS`. Each model receives up to three attempts with a short backoff; authentication and permission errors stop retries. Requests are cancelled after 15 seconds.
+3. **Graceful Degradation Engine**
    If the Groq API key is missing, rate-limited, or throws an exception:
    - The user's feedback is **still saved** successfully in Supabase.
    - The `sentiment` field defaults to `pending` or `failed`.
    - The user is shown a success screen without interruption.
-   - Admins can identify pending items in the dashboard or re-run analysis.
+  - Admins can identify pending items in the dashboard; the daily cron job retries them automatically.
 
 ---
 
-## Report Generation
+## Report Generation & Automated Processing
 
 The monthly reporting pipeline aggregates regional feedback into a professional PDF.
 
-- **Manual Generation**: Admins navigate to `/admin/reports`, choose a year and month, and click **Generate & Download PDF**. The file is generated on-demand and downloaded directly via the browser.
+- **Manual Generation**: Admins navigate to `/admin/reports`, choose a year and month, and click **Generate & Download PDF**. The authenticated `POST /api/reports/generate` route builds the report on demand and returns it as a PDF download.
+- **Pending Feedback Cron**: Vercel calls `GET /api/cron/process-feedback` daily at 02:00 (`0 2 * * *`). The endpoint requires `Authorization: Bearer <CRON_SECRET>` and uses the service-role Supabase client to update pending records.
+- Report generation is separate from the cron worker. The cron job processes AI analysis and does not email reports.
 
 ---
 
@@ -164,11 +172,11 @@ npm install
 
 ### 3. Initialize Database Migrations
 Go to your **Supabase SQL Editor** and execute the migration files in order:
-1. [001_schema.sql](file:///c:/Users/Administrator/Desktop/wc-hospital-feedback/wc-hospital-feedback/supabase/migrations/001_schema.sql) — Initializes tables, profile hooks, and base policies.
-2. [002_seed_hospitals.sql](file:///c:/Users/Administrator/Desktop/wc-hospital-feedback/wc-hospital-feedback/supabase/migrations/002_seed_hospitals.sql) — Populates 30+ regional public hospitals across 6 Western Cape districts.
-3. [003_seed_demo_feedback.sql](file:///c:/Users/Administrator/Desktop/wc-hospital-feedback/wc-hospital-feedback/supabase/migrations/003_seed_demo_feedback.sql) *(Optional)* — Populates synthetic patient feedback for localized dashboard previews.
-4. [004_fix_rls_recursion.sql](file:///c:/Users/Administrator/Desktop/wc-hospital-feedback/wc-hospital-feedback/supabase/migrations/004_fix_rls_recursion.sql) — Deploys the security definer function.
-5. [005_fix_rls_recursion_trigger.sql](file:///c:/Users/Administrator/Desktop/wc-hospital-feedback/wc-hospital-feedback/supabase/migrations/005_fix_rls_recursion_trigger.sql) — Resolves the admin profiles select recursion loop.
+1. [001_schema.sql](wc-hospital-feedback/supabase/migrations/001_schema.sql) — Initializes tables, profile hooks, and base policies.
+2. [002_seed_hospitals.sql](wc-hospital-feedback/supabase/migrations/002_seed_hospitals.sql) — Populates 30+ regional public hospitals across 6 Western Cape districts.
+3. [003_seed_demo_feedback.sql](wc-hospital-feedback/supabase/migrations/003_seed_demo_feedback.sql) *(Optional)* — Populates synthetic patient feedback for localized dashboard previews.
+4. [004_fix_rls_recursion.sql](wc-hospital-feedback/supabase/migrations/004_fix_rls_recursion.sql) — Deploys the security definer function.
+5. [005_fix_rls_recursion_trigger.sql](wc-hospital-feedback/supabase/migrations/005_fix_rls_recursion_trigger.sql) — Resolves the admin profiles select recursion loop.
 
 ### 4. Configure Environment Variables
 Create a `.env.local` file from the provided template:
@@ -182,8 +190,12 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-public-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
 
 GROQ_API_KEY=gsk_your_groq_api_key
+GROQ_MODELS=openai/gpt-oss-20b,openai/gpt-oss-120b
 
+CRON_SECRET=your-cron-secret
 ```
+
+`GROQ_MODELS` is a comma-separated fallback list. `CRON_SECRET` must match the secret configured for the Vercel Cron request. The complete variable template is available in [`.env.example`](wc-hospital-feedback/.env.example).
 
 ### 5. Elevate First Admin Profile
 1. Run the local server: `npm run dev`.
@@ -227,7 +239,9 @@ If the page catches a database crash:
 - **Database error: policy recursion detected**
   - Verify that both `004_fix_rls_recursion.sql` and `005_fix_rls_recursion_trigger.sql` migrations have been successfully run in your Supabase project.
 - **PDF Report output fails**
-  - Check server-side logs. Make sure that the `hospitals` table has been seeded (`002_seed_hospitals.sql`).
+  - Check server-side logs. Make sure that the `hospitals` table has been seeded (`002_seed_hospitals.sql`) and that the selected month contains feedback.
+- **Pending feedback is not processed**
+  - Confirm `CRON_SECRET` is configured and that the request includes `Authorization: Bearer <CRON_SECRET>`. Check the Vercel Cron logs and confirm `GROQ_MODELS` contains currently available Groq model IDs.
 
 ---
 
