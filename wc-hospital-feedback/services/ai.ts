@@ -4,7 +4,10 @@ import type { AIAnalysis, FeedbackCategory } from '@/types/database'
 // This file must ONLY be imported in server-side code (API routes, Server Components)
 // Lazy-init so the build doesn't fail when GROQ_API_KEY isn't set
 let _groq: Groq | null = null
-const GROQ_MODEL = process.env.GROQ_MODEL?.trim() || 'openai/gpt-oss-20b'
+const GROQ_MODELS = (process.env.GROQ_MODELS || 'openai/gpt-oss-20b,openai/gpt-oss-120b')
+  .split(',')
+  .map((model) => model.trim())
+  .filter(Boolean)
 
 function getGroq() {
   const apiKey = process.env.GROQ_API_KEY?.trim()
@@ -59,69 +62,73 @@ Rules:
 - issue must be specific and actionable (e.g. "Long waiting times", "Unclean bathrooms", "Friendly staff")
 - summary must be neutral and factual, not reproducing personal details`
 
-  for (let attempt = 1; attempt <= MAX_ANALYSIS_ATTEMPTS; attempt += 1) {
-    try {
-      const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), ANALYSIS_TIMEOUT_MS)
-      console.debug('[Groq request]', {
-        model: GROQ_MODEL,
-        category,
-        comment,
-        attempt,
-      })
-      const completion = await getGroq().chat.completions.create({
-        model: GROQ_MODEL,
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.1,
-        max_tokens: 200,
-        response_format: { type: 'json_object' },
-      }, { signal: controller.signal })
-      clearTimeout(timeout)
-      console.debug('[Groq HTTP status]', { status: 200, attempt })
+  for (const model of GROQ_MODELS) {
+    for (let attempt = 1; attempt <= MAX_ANALYSIS_ATTEMPTS; attempt += 1) {
+      try {
+        const controller = new AbortController()
+        const timeout = setTimeout(() => controller.abort(), ANALYSIS_TIMEOUT_MS)
+        console.debug('[Groq request]', {
+          model,
+          category,
+          comment,
+          attempt,
+        })
+        const completion = await getGroq().chat.completions.create({
+          model,
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.1,
+          max_tokens: 200,
+          response_format: { type: 'json_object' },
+        }, { signal: controller.signal })
+        clearTimeout(timeout)
+        console.debug('[Groq HTTP status]', { status: 200, model, attempt })
 
-      const raw = completion.choices[0]?.message?.content?.trim()
-      if (!raw) throw new Error('Groq returned an empty response.')
+        const raw = completion.choices[0]?.message?.content?.trim()
+        if (!raw) throw new Error('Groq returned an empty response.')
 
-      console.debug('[Groq raw content]', { content: raw })
-      const parsed = parseAnalysisResponse(raw)
-      console.debug('[Parsed analysis]', { analysis: parsed })
-      const sentiment = typeof parsed.sentiment === 'string'
-        ? parsed.sentiment.trim().toLowerCase()
-        : ''
-      const normalized: AIAnalysis = {
-        sentiment: sentiment === 'positive'
-          ? 'Positive'
-          : sentiment === 'negative'
-            ? 'Negative'
-            : 'Neutral',
-        issue: typeof parsed.issue === 'string' ? parsed.issue.trim() : '',
-        summary: typeof parsed.summary === 'string'
-          ? parsed.summary.trim()
-          : typeof parsed.ai_summary === 'string'
-            ? parsed.ai_summary.trim()
-            : '',
+        console.debug('[Groq raw content]', { content: raw })
+        const parsed = parseAnalysisResponse(raw)
+        console.debug('[Parsed analysis]', { analysis: parsed })
+        const sentiment = typeof parsed.sentiment === 'string'
+          ? parsed.sentiment.trim().toLowerCase()
+          : ''
+        const normalized: AIAnalysis = {
+          sentiment: sentiment === 'positive'
+            ? 'Positive'
+            : sentiment === 'negative'
+              ? 'Negative'
+              : 'Neutral',
+          issue: typeof parsed.issue === 'string' ? parsed.issue.trim() : '',
+          summary: typeof parsed.summary === 'string'
+            ? parsed.summary.trim()
+            : typeof parsed.ai_summary === 'string'
+              ? parsed.ai_summary.trim()
+              : '',
+        }
+
+        if (
+          !['positive', 'negative', 'neutral'].includes(sentiment) ||
+          !normalized.issue ||
+          !normalized.summary
+        ) {
+          throw new Error('Groq returned an invalid analysis payload.')
+        }
+
+        console.debug('[Final sentiment]', { sentiment: normalized.sentiment })
+        console.debug('[Final issue]', { issue: normalized.issue })
+        console.debug('[Final ai_summary]', { ai_summary: normalized.summary })
+        return normalized
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        const status = typeof error === 'object' && error !== null && 'status' in error
+          ? (error as { status?: number }).status
+          : undefined
+        console.error(`[AI] Groq model ${model} attempt ${attempt}/${MAX_ANALYSIS_ATTEMPTS} failed`, { message, status })
+        if (!isRetryableError(error)) return null
+        if (attempt < MAX_ANALYSIS_ATTEMPTS) {
+          await new Promise((resolve) => setTimeout(resolve, 500 * attempt))
+        }
       }
-
-      if (
-        !['positive', 'negative', 'neutral'].includes(sentiment) ||
-        !normalized.issue ||
-        !normalized.summary
-      ) {
-        throw new Error('Groq returned an invalid analysis payload.')
-      }
-
-      console.debug('[Final sentiment]', { sentiment: normalized.sentiment })
-      console.debug('[Final issue]', { issue: normalized.issue })
-      console.debug('[Final ai_summary]', { ai_summary: normalized.summary })
-      return normalized
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      const status = typeof error === 'object' && error !== null && 'status' in error
-        ? (error as { status?: number }).status
-        : undefined
-      console.error(`[AI] Groq analysis attempt ${attempt}/${MAX_ANALYSIS_ATTEMPTS} failed`, { message, status })
-      if (attempt === MAX_ANALYSIS_ATTEMPTS || !isRetryableError(error)) break
-      await new Promise((resolve) => setTimeout(resolve, 500 * attempt))
     }
   }
 
@@ -151,14 +158,27 @@ Data: ${stats.total} submissions. Positive: ${stats.positive_pct}%, Negative: ${
 Main issues reported: ${issueList}.
 Tone: professional, factual, South African health context. No markdown.`
 
-    const completion = await getGroq().chat.completions.create({
-      model: GROQ_MODEL,
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.3,
-      max_tokens: 150,
-    })
+    for (const model of GROQ_MODELS) {
+      for (let attempt = 1; attempt <= MAX_ANALYSIS_ATTEMPTS; attempt += 1) {
+        try {
+          const completion = await getGroq().chat.completions.create({
+            model,
+            messages: [{ role: 'user', content: prompt }],
+            temperature: 0.3,
+            max_tokens: 150,
+          })
 
-    return completion.choices[0]?.message?.content?.trim() ?? ''
+          return completion.choices[0]?.message?.content?.trim() ?? ''
+        } catch (error) {
+          if (!isRetryableError(error)) return ''
+          if (attempt < MAX_ANALYSIS_ATTEMPTS) {
+            await new Promise((resolve) => setTimeout(resolve, 500 * attempt))
+          }
+        }
+      }
+    }
+
+    return ''
   } catch {
     return ''
   }
