@@ -4,6 +4,8 @@ import type { AIAnalysis, FeedbackCategory } from '@/types/database'
 // This file must ONLY be imported in server-side code (API routes, Server Components)
 // Lazy-init so the build doesn't fail when GROQ_API_KEY isn't set
 let _groq: Groq | null = null
+const GROQ_MODEL = process.env.GROQ_MODEL?.trim() || 'openai/gpt-oss-20b'
+
 function getGroq() {
   const apiKey = process.env.GROQ_API_KEY?.trim()
   if (!apiKey) {
@@ -62,13 +64,13 @@ Rules:
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), ANALYSIS_TIMEOUT_MS)
       console.debug('[Groq request]', {
-        model: 'llama-3.1-8b-instant',
+        model: GROQ_MODEL,
         category,
         comment,
         attempt,
       })
       const completion = await getGroq().chat.completions.create({
-        model: 'llama-3.1-8b-instant',
+        model: GROQ_MODEL,
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.1,
         max_tokens: 200,
@@ -150,7 +152,7 @@ Main issues reported: ${issueList}.
 Tone: professional, factual, South African health context. No markdown.`
 
     const completion = await getGroq().chat.completions.create({
-      model: 'llama-3.1-8b-instant',
+      model: GROQ_MODEL,
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.3,
       max_tokens: 150,
