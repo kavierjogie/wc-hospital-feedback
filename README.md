@@ -1,0 +1,252 @@
+# Western Cape Public Hospital Feedback System
+
+A production-ready, security-hardened web application designed for the Western Cape Department of Health to collect, analyze, and report on patient feedback from public hospitals. Built using **Next.js 14 (App Router)**, **TypeScript**, **Supabase (PostgreSQL + Auth SSR)**, and **Groq AI**.
+
+---
+
+## Table of Contents
+
+- [Core Features](#core-features)
+- [Technical Stack](#technical-stack)
+- [System Architecture](#system-architecture)
+- [Database Schema & Security (RLS)](#database-schema--security-rls)
+- [AI Analysis & Graceful Degradation](#ai-analysis--graceful-degradation)
+- [Report Generation & Automated Cron Jobs](#report-generation--automated-cron-jobs)
+- [Quick Start Guide](#quick-start-guide)
+- [Administrative Page Diagnostics](#administrative-page-diagnostics)
+- [Troubleshooting & Maintenance](#troubleshooting--maintenance)
+- [License](#license)
+
+---
+
+## Core Features
+
+- **Patient Feedback Portal**
+  - Secure registration and login powered by Supabase Auth SSR.
+  - Multi-page feedback form supporting category selection and detailed experiences.
+  - Personalized patient dashboard to track their own past submissions with live processing statuses.
+
+- **Real-Time AI Processing**
+  - Server-side analysis of patient comments using Groq Cloud API.
+  - Instantly determines sentiment, extracts a clean, high-level issue classification, and writes a concise summary.
+  - Graceful fallback: If AI fails or rate limits are reached, the system saves feedback successfully with a `pending` status.
+
+- **Admin Analytics Dashboard**
+  - Overall key performance indicators (KPIs) showing submission volume, positive/negative/neutral ratios, and trends.
+  - Interactive charts (using Recharts) for sentiment distributions and categorical breakdowns.
+  - Real-time leaderboard showcasing top reported issues and per-hospital satisfaction comparisons.
+
+- **Feedback Browser Page**
+  - Dedicated admin workspace (`/admin/feedback`) for reviewing individual patient experiences.
+  - Dynamic filtering by hospital name and rolling 12-month calendar dropdowns.
+  - Fully details AI-extracted data, categories, and localized South African dates.
+
+- **Anonymized Monthly PDF Reports**
+  - Generates polished, government-compliant PDF summaries using `jsPDF` and `jspdf-autotable`.
+  - Compiles monthly stats, AI-synthesized summaries per facility, top issues, and anonymized sample feedback comments (ensuring full POPIA compliance).
+  - Features automated monthly cron job execution (Vercel Cron) and email delivery via Resend API.
+
+---
+
+## Technical Stack
+
+| Layer | Technology | Description |
+| :--- | :--- | :--- |
+| **Framework** | Next.js 14 (App Router) | React server components, secure server-side API routes. |
+| **Language** | TypeScript | Strong typing across data models and API contracts. |
+| **Database** | Supabase PostgreSQL | Relational database, indices, triggers, and Row Level Security. |
+| **Authentication** | Supabase Auth SSR | Secure server-side and client-side authentication sessions. |
+| **AI Integration** | Groq SDK (`llama-3.1-8b-instant`) | Ultra-fast LLM inference for sentiment analysis and summaries. |
+| **Data Visualization** | Recharts | SVG charts optimized for React components. |
+| **PDF Processing** | jsPDF + jspdf-autotable | Dynamic client/server PDF generation with strict formatting. |
+| **Styling & Assets** | Tailwind CSS + Lucide Icons | Clean modern design matching Western Cape branding guidelines. |
+| **Validation** | Zod | Server-side and client-side data schema validation. |
+| **Email Gateway** | Resend API | Automated report delivery with PDF attachments. |
+
+---
+
+## System Architecture
+
+```mermaid
+graph TD
+    User[Patient Client] -->|Submit Feedback| API_Feed[API Route: /api/feedback]
+    API_Feed -->|Analyze Text| Groq[Groq AI: Llama 3.1]
+    API_Feed -->|Insert Record| DB[(Supabase Database)]
+    Admin[Admin Client] -->|Access Dashboard| Admin_Pages[Admin Panel]
+    Admin_Pages -->|Query Stats & Feedback| DB
+    Admin_Pages -->|Trigger Manual PDF| API_Report[API Route: /api/reports/generate]
+    API_Report -->|Generate PDF| PDF_Service[Report Service: jsPDF]
+    Vercel_Cron[Vercel Cron Job] -->|Monthly GET| API_Cron[API Route: /api/cron/monthly-report]
+    API_Cron -->|Aggregate Stats| DB
+    API_Cron -->|Generate PDF| PDF_Service
+    API_Cron -->|Send PDF Attachment| Resend[Resend Email Service]
+```
+
+---
+
+## Database Schema & Security (RLS)
+
+The system relies on PostgreSQL's native security features to protect sensitive patient records. All tables have **Row Level Security (RLS)** enabled, restricting operations to verified roles.
+
+### Table Policies Overview
+
+| Table | Patients (`patient` role) | Administrators (`admin` role) | Service Role |
+| :--- | :--- | :--- | :--- |
+| `profiles` | Read & Update own profile | Read all profiles | Read & Write all |
+| `hospitals` | Read all | Read all | Read & Write all |
+| `feedback` | Insert own, Read own submissions | Read all submissions | Read & Write all |
+
+### Resolving RLS Recursion Loops
+
+A common pitfall in Supabase is RLS policy recursion, which occurs when a policy checks the `profiles` table to verify roles, trigger-loading the policy itself. This project solves this recursion loop via two specialized database migrations:
+
+1. **Security Definer Helper (`004_fix_rls_recursion.sql`)**
+   A helper function `is_admin()` is declared with `SECURITY DEFINER` and `SET search_path = public`. It runs with superuser privileges, bypassing RLS checks to query user roles cleanly:
+   ```sql
+   CREATE OR REPLACE FUNCTION public.is_admin()
+   RETURNS BOOLEAN AS $$
+   BEGIN
+     RETURN EXISTS (
+       SELECT 1 FROM public.profiles
+       WHERE id = auth.uid() AND role = 'admin'
+     );
+   END;
+   $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+   ```
+
+2. **Self-Exclusion Policy (`005_fix_rls_recursion_trigger.sql`)**
+   To prevent `is_admin()` from evaluating recursively on the administrator's own profile row inside the subquery, the profiles SELECT policy enforces a self-exclusion rule:
+   ```sql
+   CREATE POLICY "Admins can view all profiles"
+     ON public.profiles FOR SELECT
+     USING ( (id != auth.uid()) AND public.is_admin() );
+   ```
+
+---
+
+## AI Analysis & Graceful Degradation
+
+AI processing runs entirely **server-side** inside the `/api/feedback` route, ensuring `GROQ_API_KEY` is never exposed in client bundles.
+
+1. **Prompt Engineering & Output Validation**
+   The system supplies the patient's comment and category to Groq, demanding a structured JSON response specifying `sentiment` (restricted to `Positive`, `Negative`, `Neutral`), a 5-word `issue` classification, and a 25-word `summary`. Server-side validation parses, strips markdown fences, and verifies this structure.
+2. **Graceful Degradation Engine**
+   If the Groq API key is missing, rate-limited, or throws an exception:
+   - The user's feedback is **still saved** successfully in Supabase.
+   - The `sentiment` field defaults to `pending` or `failed`.
+   - The user is shown a success screen without interruption.
+   - Admins can identify pending items in the dashboard or re-run analysis.
+
+---
+
+## Report Generation & Automated Cron Jobs
+
+The monthly reporting pipeline aggregates regional feedback into a professional PDF and dispatches it automatically.
+
+- **Manual Generation**: Admins navigate to `/admin/reports`, choose a year and month, and click **Generate & Download PDF**. The file is generated on-demand and downloaded directly via the browser.
+- **Automated Vercel Cron Job**:
+  - The schedule is managed via [vercel.json](file:///c:/Users/Administrator/Desktop/wc-hospital-feedback/wc-hospital-feedback/vercel.json) and triggers on the **1st of every month at 06:00 UTC** to report on the preceding month.
+  - The API route `/api/cron/monthly-report` processes statistics, constructs the PDF, and sends it to the configured recipient email via **Resend**.
+  - **Security**: The cron route requires verification of a custom header `x-cron-secret` matching `CRON_SECRET` to prevent unauthorized execution.
+
+---
+
+## Quick Start Guide
+
+### 1. Pre-requisites
+- Node.js 18+ installed.
+- A Supabase Project (free tier is fine).
+- A Groq Cloud account and API key.
+- A Resend API key (optional, for email cron reports).
+
+### 2. Installation & Setup
+Clone the repository, navigate to the source directory, and install dependencies:
+```bash
+git clone <repository-url>
+cd wc-hospital-feedback/wc-hospital-feedback
+npm install
+```
+
+### 3. Initialize Database Migrations
+Go to your **Supabase SQL Editor** and execute the migration files in order:
+1. [001_schema.sql](file:///c:/Users/Administrator/Desktop/wc-hospital-feedback/wc-hospital-feedback/supabase/migrations/001_schema.sql) — Initializes tables, profile hooks, and base policies.
+2. [002_seed_hospitals.sql](file:///c:/Users/Administrator/Desktop/wc-hospital-feedback/wc-hospital-feedback/supabase/migrations/002_seed_hospitals.sql) — Populates 30+ regional public hospitals across 6 Western Cape districts.
+3. [003_seed_demo_feedback.sql](file:///c:/Users/Administrator/Desktop/wc-hospital-feedback/wc-hospital-feedback/supabase/migrations/003_seed_demo_feedback.sql) *(Optional)* — Populates synthetic patient feedback for localized dashboard previews.
+4. [004_fix_rls_recursion.sql](file:///c:/Users/Administrator/Desktop/wc-hospital-feedback/wc-hospital-feedback/supabase/migrations/004_fix_rls_recursion.sql) — Deploys the security definer function.
+5. [005_fix_rls_recursion_trigger.sql](file:///c:/Users/Administrator/Desktop/wc-hospital-feedback/wc-hospital-feedback/supabase/migrations/005_fix_rls_recursion_trigger.sql) — Resolves the admin profiles select recursion loop.
+
+### 4. Configure Environment Variables
+Create a `.env.local` file from the provided template:
+```bash
+cp .env.example .env.local
+```
+Fill out the variables accordingly:
+```env
+NEXT_PUBLIC_SUPABASE_URL=https://your-project-id.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-public-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
+
+GROQ_API_KEY=gsk_your_groq_api_key
+
+# Optional report configurations
+REPORT_RECIPIENT_EMAIL=department-head@westerncape.gov.za
+EMAIL_API_KEY=re_your_resend_api_key
+
+# Vercel cron security check
+CRON_SECRET=your-randomly-generated-secure-string
+```
+
+### 5. Elevate First Admin Profile
+1. Run the local server: `npm run dev`.
+2. Navigate to `http://localhost:3000/register` and create an account.
+3. Find your User UUID in the Supabase Authentication dashboard.
+4. Execute this SQL query in the Supabase SQL Editor to elevate your user role:
+   ```sql
+   UPDATE public.profiles
+   SET role = 'admin'
+   WHERE id = 'your-user-uuid-here';
+   ```
+
+### 6. Local Testing Endpoints
+- **Landing Page**: `http://localhost:3000`
+- **Feedback Submission**: `http://localhost:3000/feedback`
+- **My Submissions List**: `http://localhost:3000/my-feedback`
+- **Admin Dashboard**: `http://localhost:3000/admin/dashboard`
+- **Admin Feedback Browser**: `http://localhost:3000/admin/feedback`
+- **Monthly PDF Hub**: `http://localhost:3000/admin/reports`
+- **Simulate Vercel Cron**:
+  ```bash
+  curl -X GET "http://localhost:3000/api/cron/monthly-report" \
+    -H "x-cron-secret: your-cron-secret"
+  ```
+
+---
+
+## Administrative Page Diagnostics
+
+The Feedback Browser page (`/admin/feedback`) includes a server-side error boundary designed to catch database anomalies (such as missing environment variables or outdated RLS definitions).
+
+If the page catches a database crash:
+- It halts safely rather than showing a generic Next.js error screen.
+- It displays a custom administration diagnostic interface.
+- It prints the exact system error code and message.
+- It provides a check-list of required variables and migrations (`004_fix_rls_recursion.sql`, `SUPABASE_SERVICE_ROLE_KEY`, etc.) for fast debugging.
+
+---
+
+## Troubleshooting & Maintenance
+
+- **"Groq API key not configured"**
+  - Ensure `GROQ_API_KEY` is set in `.env.local` or Vercel dashboard. Feedback will still be inserted with `pending` sentiment.
+- **Admin pages redirect to /feedback**
+  - Double check your profile role. Run `SELECT id, role FROM profiles;` in Supabase SQL editor and verify your profile contains `admin`.
+- **Database error: policy recursion detected**
+  - Verify that both `004_fix_rls_recursion.sql` and `005_fix_rls_recursion_trigger.sql` migrations have been successfully run in your Supabase project.
+- **PDF Report output fails**
+  - Check server-side logs. Make sure that the `hospitals` table has been seeded (`002_seed_hospitals.sql`).
+
+---
+
+## License
+
+Distributed internally. Authorized for use by the Western Cape Department of Health only. Not for public redistribution.
