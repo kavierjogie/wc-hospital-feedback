@@ -139,15 +139,11 @@ AI processing runs entirely **server-side** inside the `/api/feedback` route, en
 
 ---
 
-## Report Generation & Automated Cron Jobs
+## Report Generation
 
-The monthly reporting pipeline aggregates regional feedback into a professional PDF and dispatches it automatically.
+The monthly reporting pipeline aggregates regional feedback into a professional PDF.
 
 - **Manual Generation**: Admins navigate to `/admin/reports`, choose a year and month, and click **Generate & Download PDF**. The file is generated on-demand and downloaded directly via the browser.
-- **Automated Vercel Cron Job**:
-  - The schedule is managed via [vercel.json](file:///c:/Users/Administrator/Desktop/wc-hospital-feedback/wc-hospital-feedback/vercel.json) and triggers on the **1st of every month at 06:00 UTC** to report on the preceding month.
-  - The API route `/api/cron/monthly-report` processes statistics, constructs the PDF, and sends it to the configured recipient email via **Resend**.
-  - **Security**: The cron route requires verification of a custom header `x-cron-secret` matching `CRON_SECRET` to prevent unauthorized execution.
 
 ---
 
@@ -157,7 +153,6 @@ The monthly reporting pipeline aggregates regional feedback into a professional 
 - Node.js 18+ installed.
 - A Supabase Project (free tier is fine).
 - A Groq Cloud account and API key.
-- A Resend API key (optional, for email cron reports).
 
 ### 2. Installation & Setup
 Clone the repository, navigate to the source directory, and install dependencies:
@@ -188,12 +183,6 @@ SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
 
 GROQ_API_KEY=gsk_your_groq_api_key
 
-# Optional report configurations
-REPORT_RECIPIENT_EMAIL=department-head@westerncape.gov.za
-EMAIL_API_KEY=re_your_resend_api_key
-
-# Vercel cron security check
-CRON_SECRET=your-randomly-generated-secure-string
 ```
 
 ### 5. Elevate First Admin Profile
@@ -214,11 +203,6 @@ CRON_SECRET=your-randomly-generated-secure-string
 - **Admin Dashboard**: `http://localhost:3000/admin/dashboard`
 - **Admin Feedback Browser**: `http://localhost:3000/admin/feedback`
 - **Monthly PDF Hub**: `http://localhost:3000/admin/reports`
-- **Simulate Vercel Cron**:
-  ```bash
-  curl -X GET "http://localhost:3000/api/cron/monthly-report" \
-    -H "x-cron-secret: your-cron-secret"
-  ```
 
 ---
 

@@ -151,15 +151,6 @@ export default function ReportClient({ months }: Props) {
           </li>
         </ul>
       </div>
-
-      <div className="card p-5 border-amber-200 bg-amber-50">
-        <h3 className="text-sm font-semibold text-amber-900 mb-1">Automated Cron Delivery</h3>
-        <p className="text-xs text-amber-800">
-          Set <code className="bg-amber-100 px-1 py-0.5 rounded">REPORT_RECIPIENT_EMAIL</code> and{' '}
-          <code className="bg-amber-100 px-1 py-0.5 rounded">EMAIL_API_KEY</code> in your environment
-          variables to enable automatic monthly email delivery via Vercel Cron Job. See README for setup.
-        </p>
-      </div>
     </div>
   )
 }
