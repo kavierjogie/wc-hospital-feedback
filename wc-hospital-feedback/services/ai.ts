@@ -24,6 +24,18 @@ function isRetryableError(error: unknown) {
   return !/invalid api key|authentication|permission|unauthorized/i.test(error.message)
 }
 
+function parseAnalysisResponse(raw: string): Partial<AIAnalysis> & { ai_summary?: unknown } {
+  const withoutFence = raw.replace(/^\s*```(?:json)?\s*|\s*```\s*$/gi, '').trim()
+  try {
+    return JSON.parse(withoutFence) as Partial<AIAnalysis>
+  } catch {
+    const start = withoutFence.indexOf('{')
+    const end = withoutFence.lastIndexOf('}')
+    if (start < 0 || end <= start) throw new Error('Groq response did not contain a JSON object.')
+    return JSON.parse(withoutFence.slice(start, end + 1)) as Partial<AIAnalysis>
+  }
+}
+
 export async function analyzeFeedback(
   comment: string,
   category: FeedbackCategory
@@ -49,22 +61,28 @@ Rules:
     try {
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), ANALYSIS_TIMEOUT_MS)
+      console.debug('[Groq request]', {
+        model: 'llama-3.1-8b-instant',
+        category,
+        comment,
+        attempt,
+      })
       const completion = await getGroq().chat.completions.create({
         model: 'llama-3.1-8b-instant',
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.1,
         max_tokens: 200,
+        response_format: { type: 'json_object' },
       }, { signal: controller.signal })
       clearTimeout(timeout)
-      console.debug('[AI] Groq request succeeded', { status: 200, attempt })
+      console.debug('[Groq HTTP status]', { status: 200, attempt })
 
       const raw = completion.choices[0]?.message?.content?.trim()
       if (!raw) throw new Error('Groq returned an empty response.')
 
-      console.debug('[AI] Groq raw response', { response: raw })
-      const cleaned = raw.replace(/```json|```/g, '').trim()
-      const parsed = JSON.parse(cleaned) as Partial<AIAnalysis>
-      console.debug('[AI] Parsed Groq response', { response: parsed })
+      console.debug('[Groq raw content]', { content: raw })
+      const parsed = parseAnalysisResponse(raw)
+      console.debug('[Parsed analysis]', { analysis: parsed })
       const sentiment = typeof parsed.sentiment === 'string'
         ? parsed.sentiment.trim().toLowerCase()
         : ''
@@ -74,8 +92,12 @@ Rules:
           : sentiment === 'negative'
             ? 'Negative'
             : 'Neutral',
-        issue: parsed.issue ?? '',
-        summary: parsed.summary ?? '',
+        issue: typeof parsed.issue === 'string' ? parsed.issue.trim() : '',
+        summary: typeof parsed.summary === 'string'
+          ? parsed.summary.trim()
+          : typeof parsed.ai_summary === 'string'
+            ? parsed.ai_summary.trim()
+            : '',
       }
 
       if (
@@ -86,7 +108,9 @@ Rules:
         throw new Error('Groq returned an invalid analysis payload.')
       }
 
-      console.debug('[AI] Final sentiment returned from analysis', { sentiment: normalized.sentiment })
+      console.debug('[Final sentiment]', { sentiment: normalized.sentiment })
+      console.debug('[Final issue]', { issue: normalized.issue })
+      console.debug('[Final ai_summary]', { ai_summary: normalized.summary })
       return normalized
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -99,8 +123,7 @@ Rules:
     }
   }
 
-  console.error('[AI] Groq analysis failed after all attempts; using fallback status.')
-  console.debug('[AI] Final sentiment returned from analysis', { sentiment: null })
+  console.error('[AI] Groq analysis failed after all attempts; returning null to the API route.')
   return null
 }
 

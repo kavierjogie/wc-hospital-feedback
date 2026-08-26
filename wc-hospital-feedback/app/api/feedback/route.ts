@@ -38,26 +38,36 @@ export async function POST(req: NextRequest) {
 
     // AI analysis (server-side only — Groq key never leaves the server)
     const analysis = await analyzeFeedback(comment, category)
-    const sentiment = analysis?.sentiment ?? 'failed'
-    console.debug('[API] Final sentiment being sent to Supabase', { sentiment })
+    const sentiment = analysis?.sentiment ?? 'pending'
+    console.debug('[Final sentiment]', { sentiment })
+    console.debug('[Final issue]', { issue: analysis?.issue ?? null })
+    console.debug('[Final ai_summary]', { ai_summary: analysis?.summary ?? null })
+    const insertPayload = {
+      user_id: user.id,
+      hospital_id,
+      category,
+      comment,
+      sentiment,
+      issue: analysis?.issue ?? null,
+      ai_summary: analysis?.summary ?? null,
+    }
+    console.debug('[Supabase insert payload]', insertPayload)
 
     // Store feedback (store regardless of AI analysis success)
     const { data: feedback, error: insertErr } = await supabase
       .from('feedback')
-      .insert({
-        user_id: user.id,
-        hospital_id,
-        category,
-        comment,
-        sentiment,
-        issue: analysis?.issue ?? null,
-        ai_summary: analysis?.summary ?? null,
-      })
+      .insert(insertPayload)
       .select()
       .single()
 
     if (insertErr) {
-      console.error('[API] feedback insert error:', insertErr)
+      console.error('[Supabase insert error]', {
+        error: insertErr,
+        message: insertErr.message,
+        code: insertErr.code,
+        details: insertErr.details,
+        hint: insertErr.hint,
+      })
       return NextResponse.json(
         {
           error: `Failed to save feedback: ${insertErr.message} (code: ${insertErr.code}, details: ${insertErr.details || 'none'}, hint: ${insertErr.hint || 'none'})`
