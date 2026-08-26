@@ -1,11 +1,21 @@
-import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import DashboardClient from '@/components/admin/DashboardClient'
 
 export const revalidate = 0
 
-export default async function AdminDashboardPage() {
+interface SearchParams {
+  hospital?: string
+  month?: string
+}
+
+export default async function AdminDashboardPage({
+  searchParams = {},
+}: {
+  searchParams?: SearchParams
+}) {
   const supabase = createAdminClient()
+  const hospitalId = searchParams?.hospital
+  const month = searchParams?.month
 
   // Load hospitals for filter
   const { data: hospitals } = await supabase
@@ -13,14 +23,43 @@ export default async function AdminDashboardPage() {
     .select('id, name, district')
     .order('name')
 
-  // Summary stats
-  const { count: totalFeedback } = await supabase
-    .from('feedback')
-    .select('*', { count: 'exact', head: true })
+  // Build month options (last 12 months)
+  const monthOptions: { value: string; label: string }[] = []
+  const now = new Date()
+  for (let i = 0; i < 12; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    monthOptions.push({
+      value: `${d.getFullYear()}-${d.getMonth() + 1}`,
+      label: d.toLocaleDateString('en-ZA', { month: 'long', year: 'numeric' }),
+    })
+  }
 
-  const { data: sentimentData } = await supabase
-    .from('feedback')
-    .select('sentiment')
+  // Filter building helper
+  const applyFilters = <T,>(queryBuilder: T): T => {
+    let q = queryBuilder as any
+    if (hospitalId) {
+      q = q.eq('hospital_id', hospitalId)
+    }
+    if (month) {
+      const [year, mNum] = month.split('-').map(Number)
+      if (!isNaN(year) && !isNaN(mNum)) {
+        const start = `${year}-${String(mNum).padStart(2, '0')}-01`
+        const lastDay = new Date(year, mNum, 0).getDate()
+        const end = `${year}-${String(mNum).padStart(2, '0')}-${lastDay}T23:59:59`
+        q = q.gte('created_at', start).lte('created_at', end)
+      }
+    }
+    return q as T
+  }
+
+  // Summary stats
+  const { count: totalFeedback } = await applyFilters(
+    supabase.from('feedback').select('*', { count: 'exact', head: true })
+  )
+
+  const { data: sentimentData } = await applyFilters(
+    supabase.from('feedback').select('sentiment')
+  )
 
   const sentimentCounts = (sentimentData ?? []).reduce<Record<string, number>>(
     (acc, f) => {
@@ -32,9 +71,9 @@ export default async function AdminDashboardPage() {
   )
 
   // Category breakdown
-  const { data: categoryData } = await supabase
-    .from('feedback')
-    .select('category')
+  const { data: categoryData } = await applyFilters(
+    supabase.from('feedback').select('category')
+  )
 
   const categoryCounts = (categoryData ?? []).reduce<Record<string, number>>(
     (acc, f) => {
@@ -45,10 +84,9 @@ export default async function AdminDashboardPage() {
   )
 
   // Top issues
-  const { data: issueData } = await supabase
-    .from('feedback')
-    .select('issue')
-    .not('issue', 'is', null)
+  const { data: issueData } = await applyFilters(
+    supabase.from('feedback').select('issue').not('issue', 'is', null)
+  )
 
   const issueCounts = (issueData ?? []).reduce<Record<string, number>>(
     (acc, f) => {
@@ -64,16 +102,16 @@ export default async function AdminDashboardPage() {
     .slice(0, 10)
 
   // Recent feedback
-  const { data: recentFeedback } = await supabase
-    .from('feedback')
-    .select('*, hospitals(name)')
+  const { data: recentFeedback } = await applyFilters(
+    supabase.from('feedback').select('*, hospitals(name)')
+  )
     .order('created_at', { ascending: false })
     .limit(10)
 
   // Per-hospital breakdown
-  const { data: allFeedback } = await supabase
-    .from('feedback')
-    .select('hospital_id, sentiment, hospitals(name)')
+  const { data: allFeedback } = await applyFilters(
+    supabase.from('feedback').select('hospital_id, sentiment, hospitals(name)')
+  )
 
   const hospitalStats = (hospitals ?? []).map((h) => {
     const rows = (allFeedback ?? []).filter((f) => f.hospital_id === h.id)
@@ -101,6 +139,9 @@ export default async function AdminDashboardPage() {
       topIssues={topIssues}
       recentFeedback={recentFeedback ?? []}
       hospitalStats={hospitalStats}
+      selectedHospitalId={hospitalId}
+      selectedMonth={month}
+      monthOptions={monthOptions}
     />
   )
 }

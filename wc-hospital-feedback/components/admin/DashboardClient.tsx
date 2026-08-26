@@ -6,6 +6,8 @@ import {
 } from 'recharts'
 import { formatDateTime, sentimentColor, cn } from '@/lib/utils'
 import { Users, ClipboardList, TrendingUp, TrendingDown, AlertTriangle } from 'lucide-react'
+import HospitalFilter from './HospitalFilter'
+import MonthFilter from './MonthFilter'
 
 interface Props {
   hospitals: { id: string; name: string; district: string }[]
@@ -18,6 +20,9 @@ interface Props {
     id: string; name: string; district: string; total: number
     positive: number; negative: number; neutral: number
   }[]
+  selectedHospitalId?: string
+  selectedMonth?: string
+  monthOptions: { value: string; label: string }[]
 }
 
 const SENTIMENT_COLORS: Record<string, string> = {
@@ -29,12 +34,16 @@ const SENTIMENT_COLORS: Record<string, string> = {
 }
 
 export default function DashboardClient({
+  hospitals,
   totalFeedback,
   sentimentCounts,
   categoryCounts,
   topIssues,
   recentFeedback,
   hospitalStats,
+  selectedHospitalId,
+  selectedMonth,
+  monthOptions,
 }: Props) {
   const sentimentPieData = Object.entries(sentimentCounts)
     .filter(([k]) => ['Positive', 'Negative', 'Neutral'].includes(k))
@@ -51,9 +60,24 @@ export default function DashboardClient({
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gov-900">Dashboard</h1>
-        <p className="text-sm text-gray-500 mt-1">Western Cape public hospital feedback overview</p>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold text-gov-900">Dashboard</h1>
+          <p className="text-sm text-gray-500 mt-1">Western Cape public hospital feedback overview</p>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="card p-4 flex flex-wrap gap-4 items-center">
+        <HospitalFilter
+          hospitals={hospitals}
+          selectedId={selectedHospitalId}
+        />
+
+        <MonthFilter
+          months={monthOptions}
+          selectedMonth={selectedMonth}
+        />
       </div>
 
       {/* KPI cards */}

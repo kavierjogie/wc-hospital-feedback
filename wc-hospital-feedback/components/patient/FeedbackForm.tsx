@@ -2,9 +2,10 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { AlertCircle, Send, Info, Sparkles, HeartHandshake, Clock, Activity, Building2, HelpCircle } from 'lucide-react'
+import { AlertCircle, Send, Info, Sparkles, HeartHandshake, Clock, Activity, Building2, HelpCircle, Check } from 'lucide-react'
 import type { Hospital, FeedbackCategory } from '@/types/database'
 import { cn } from '@/lib/utils'
+import HospitalCombobox from './HospitalCombobox'
 
 const CATEGORIES: FeedbackCategory[] = [
   'Cleanliness',
@@ -102,41 +103,32 @@ export default function FeedbackForm({ hospitals }: Props) {
     }
   }
 
-  // Group hospitals by district
-  const byDistrict = hospitals.reduce<Record<string, typeof hospitals>>((acc, h) => {
-    if (!acc[h.district]) acc[h.district] = []
-    acc[h.district].push(h)
-    return acc
-  }, {})
-
   return (
     <form onSubmit={handleSubmit} noValidate>
       <div className="card divide-y divide-gray-100">
 
         {/* Hospital */}
         <div className="p-6">
-          <label htmlFor="hospital" className="label">
+          <label className="label">
             Hospital <span className="text-red-500">*</span>
           </label>
-          <select
-            id="hospital"
+          <HospitalCombobox
+            hospitals={hospitals}
             value={hospitalId}
-            onChange={(e) => setHospitalId(e.target.value)}
-            className={cn('input', fieldErrors.hospital_id && 'border-red-400 focus:ring-red-400')}
-          >
-            <option value="">Select a hospital…</option>
-            {Object.entries(byDistrict)
-              .sort(([a], [b]) => a.localeCompare(b))
-              .map(([district, list]) => (
-                <optgroup key={district} label={district}>
-                  {list.map((h) => (
-                    <option key={h.id} value={h.id}>{h.name}</option>
-                  ))}
-                </optgroup>
-              ))}
-          </select>
+            onChange={(id) => {
+              setHospitalId(id)
+              if (fieldErrors.hospital_id) {
+                setFieldErrors((prev) => {
+                  const next = { ...prev }
+                  delete next.hospital_id
+                  return next
+                })
+              }
+            }}
+            error={fieldErrors.hospital_id}
+          />
           {fieldErrors.hospital_id && (
-            <p className="error-msg"><AlertCircle className="w-3 h-3" />{fieldErrors.hospital_id}</p>
+            <p className="error-msg mt-1.5"><AlertCircle className="w-3.5 h-3.5" />{fieldErrors.hospital_id}</p>
           )}
         </div>
 
@@ -188,21 +180,44 @@ export default function FeedbackForm({ hospitals }: Props) {
             id="comment"
             rows={6}
             value={comment}
-            onChange={(e) => setComment(e.target.value)}
+            onChange={(e) => {
+              setComment(e.target.value)
+              if (fieldErrors.comment) {
+                setFieldErrors((prev) => {
+                  const next = { ...prev }
+                  delete next.comment
+                  return next
+                })
+              }
+            }}
             placeholder="Please describe your experience in as much detail as possible. What happened? When was it? What could be improved?"
             className={cn(
               'input resize-none',
               fieldErrors.comment && 'border-red-400 focus:ring-red-400'
             )}
           />
-          <div className="flex items-start justify-between mt-1.5">
-            {fieldErrors.comment ? (
-              <p className="error-msg"><AlertCircle className="w-3 h-3" />{fieldErrors.comment}</p>
-            ) : (
-              <span />
-            )}
-            <span className={cn('text-xs ml-auto', remaining < 100 ? 'text-amber-600' : 'text-gray-400')}>
-              {remaining} remaining
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mt-1.5">
+            <div className="flex-1">
+              {fieldErrors.comment ? (
+                <p className="error-msg"><AlertCircle className="w-3.5 h-3.5" />{fieldErrors.comment}</p>
+              ) : (
+                <div>
+                  {comment.trim().length < 20 ? (
+                    <p className="text-xs text-amber-600 flex items-center gap-1">
+                      <Info className="w-3.5 h-3.5" />
+                      Enter at least {20 - comment.trim().length} more character{20 - comment.trim().length !== 1 ? 's' : ''}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-emerald-600 flex items-center gap-1 font-semibold">
+                      <Check className="w-3.5 h-3.5" />
+                      Minimum length met ({comment.trim().length} characters)
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+            <span className={cn('text-xs font-mono sm:ml-auto', remaining < 100 ? 'text-amber-600' : 'text-gray-400')}>
+              {remaining} left
             </span>
           </div>
         </div>
