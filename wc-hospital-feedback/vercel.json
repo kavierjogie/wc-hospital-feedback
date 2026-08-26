@@ -1,1 +1,8 @@
-{}
+{
+	"crons": [
+		{
+			"path": "/api/cron/process-feedback",
+			"schedule": "*/5 * * * *"
+		}
+	]
+}

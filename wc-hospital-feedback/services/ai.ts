@@ -5,18 +5,30 @@ import type { AIAnalysis, FeedbackCategory } from '@/types/database'
 // Lazy-init so the build doesn't fail when GROQ_API_KEY isn't set
 let _groq: Groq | null = null
 function getGroq() {
+  const apiKey = process.env.GROQ_API_KEY?.trim()
+  if (!apiKey) {
+    throw new Error('GROQ_API_KEY is not configured.')
+  }
+
   if (!_groq) {
-    _groq = new Groq({ apiKey: process.env.GROQ_API_KEY })
+    _groq = new Groq({ apiKey })
   }
   return _groq
+}
+
+const MAX_ANALYSIS_ATTEMPTS = 3
+const ANALYSIS_TIMEOUT_MS = 15_000
+
+function isRetryableError(error: unknown) {
+  if (!(error instanceof Error)) return true
+  return !/invalid api key|authentication|permission|unauthorized/i.test(error.message)
 }
 
 export async function analyzeFeedback(
   comment: string,
   category: FeedbackCategory
 ): Promise<AIAnalysis | null> {
-  try {
-    const prompt = `You are analyzing patient feedback submitted to a Western Cape public hospital in South Africa.
+  const prompt = `You are analyzing patient feedback submitted to a Western Cape public hospital in South Africa.
 
 Category: ${category}
 Patient comment: "${comment}"
@@ -33,34 +45,43 @@ Rules:
 - issue must be specific and actionable (e.g. "Long waiting times", "Unclean bathrooms", "Friendly staff")
 - summary must be neutral and factual, not reproducing personal details`
 
-    const completion = await getGroq().chat.completions.create({
-      model: 'llama-3.1-8b-instant',
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.1,
-      max_tokens: 200,
-    })
+  for (let attempt = 1; attempt <= MAX_ANALYSIS_ATTEMPTS; attempt += 1) {
+    try {
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), ANALYSIS_TIMEOUT_MS)
+      const completion = await getGroq().chat.completions.create({
+        model: 'llama-3.1-8b-instant',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.1,
+        max_tokens: 200,
+      }, { signal: controller.signal })
+      clearTimeout(timeout)
 
-    const raw = completion.choices[0]?.message?.content?.trim()
-    if (!raw) return null
+      const raw = completion.choices[0]?.message?.content?.trim()
+      if (!raw) throw new Error('Groq returned an empty response.')
 
-    // Strip any accidental markdown fences
-    const cleaned = raw.replace(/```json|```/g, '').trim()
-    const parsed = JSON.parse(cleaned) as AIAnalysis
+      const cleaned = raw.replace(/```json|```/g, '').trim()
+      const parsed = JSON.parse(cleaned) as AIAnalysis
 
-    // Validate structure
-    if (
-      !['Positive', 'Negative', 'Neutral'].includes(parsed.sentiment) ||
-      !parsed.issue ||
-      !parsed.summary
-    ) {
-      return null
+      if (
+        !['Positive', 'Negative', 'Neutral'].includes(parsed.sentiment) ||
+        !parsed.issue ||
+        !parsed.summary
+      ) {
+        throw new Error('Groq returned an invalid analysis payload.')
+      }
+
+      return parsed
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      console.error(`[AI] Groq analysis attempt ${attempt}/${MAX_ANALYSIS_ATTEMPTS} failed: ${message}`)
+      if (attempt === MAX_ANALYSIS_ATTEMPTS || !isRetryableError(error)) break
+      await new Promise((resolve) => setTimeout(resolve, 500 * attempt))
     }
-
-    return parsed
-  } catch (err) {
-    console.error('[AI] analyzeFeedback error:', err)
-    return null
   }
+
+  console.error('[AI] Groq analysis failed after all attempts; using fallback status.')
+  return null
 }
 
 export async function generateHospitalSummary(

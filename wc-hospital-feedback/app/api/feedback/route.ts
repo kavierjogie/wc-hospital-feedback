@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
         hospital_id,
         category,
         comment,
-        sentiment: analysis?.sentiment ?? 'pending',
+        sentiment: analysis?.sentiment ?? 'failed',
         issue: analysis?.issue ?? null,
         ai_summary: analysis?.summary ?? null,
       })
