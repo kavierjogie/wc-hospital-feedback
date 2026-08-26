@@ -2,7 +2,7 @@
 	"crons": [
 		{
 			"path": "/api/cron/process-feedback",
-			"schedule": "*/5 * * * *"
+			"schedule": "0 2 * * *"
 		}
 	]
 }
