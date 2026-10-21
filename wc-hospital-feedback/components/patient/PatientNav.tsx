@@ -9,14 +9,19 @@ import { cn } from '@/lib/utils'
 
 interface Props {
   fullName: string
+  /** Demo Mode: links stay under /demo and "sign out" exits the demo. */
+  demo?: boolean
 }
 
-export default function PatientNav({ fullName }: Props) {
+export default function PatientNav({ fullName, demo }: Props) {
   const pathname = usePathname()
   const router = useRouter()
   const [menuOpen, setMenuOpen] = useState(false)
 
+  const base = demo ? '/demo' : ''
+
   async function handleSignOut() {
+    if (demo) return router.push('/')
     const supabase = createClient()
     await supabase.auth.signOut()
     router.push('/login')
@@ -24,14 +29,14 @@ export default function PatientNav({ fullName }: Props) {
   }
 
   const links = [
-    { href: '/feedback', label: 'Submit Feedback', icon: <ClipboardList className="w-4 h-4" /> },
-    { href: '/my-feedback', label: 'My Submissions', icon: <ClipboardList className="w-4 h-4" /> },
+    { href: base + '/feedback', label: 'Submit Feedback', icon: <ClipboardList className="w-4 h-4" /> },
+    { href: base + '/my-feedback', label: 'My Submissions', icon: <ClipboardList className="w-4 h-4" /> },
   ]
 
   return (
     <nav className="bg-gov-900 text-white sticky top-0 z-40 shadow-md">
       <div className="max-w-4xl mx-auto px-4 h-14 flex items-center justify-between">
-        <Link href="/feedback" className="flex items-center gap-2.5">
+        <Link href={base + '/feedback'} className="flex items-center gap-2.5">
           <Building2 className="w-5 h-5 text-brand-400" />
           <span className="font-semibold text-sm hidden sm:block">WC Health Feedback</span>
         </Link>
@@ -61,7 +66,7 @@ export default function PatientNav({ fullName }: Props) {
           <span className="text-xs text-gov-400 max-w-[140px] truncate">{fullName}</span>
           <button onClick={handleSignOut} className="flex items-center gap-1.5 text-xs text-gov-300 hover:text-white transition-colors">
             <LogOut className="w-3.5 h-3.5" />
-            Sign out
+            {demo ? 'Exit demo' : 'Sign out'}
           </button>
         </div>
 
@@ -95,7 +100,7 @@ export default function PatientNav({ fullName }: Props) {
               className="flex items-center gap-1.5 text-sm text-gov-300 hover:text-white"
             >
               <LogOut className="w-4 h-4" />
-              Sign out
+              {demo ? 'Exit demo' : 'Sign out'}
             </button>
           </div>
         </div>

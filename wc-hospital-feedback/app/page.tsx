@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Heart, ClipboardList, BarChart3, ShieldCheck, ChevronRight, Building2, Sparkles, Activity } from 'lucide-react'
+import { Heart, ClipboardList, BarChart3, ShieldCheck, ChevronRight, Building2, Sparkles, Activity, PlayCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export default function HomePage() {
@@ -15,6 +15,9 @@ export default function HomePage() {
             </span>
           </div>
           <div className="flex items-center gap-3">
+            <Link href="/demo" className="hidden sm:inline text-sm text-brand-300 hover:text-white font-medium transition-colors">
+              Try the Demo
+            </Link>
             <Link href="/login" className="text-sm text-gray-300 hover:text-white transition-colors">
               Sign in
             </Link>
@@ -51,12 +54,16 @@ export default function HomePage() {
               of Health identify problems and make meaningful improvements for all patients.
             </p>
             
-            <div className="flex flex-col sm:flex-row gap-3.5 w-full sm:w-auto">
-              <Link href="/register" className="btn-primary text-sm py-3 px-6 shadow-lg shadow-brand-500/15 hover:scale-[1.02] active:scale-[0.98] transition-transform">
+            <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3.5 w-full sm:w-auto">
+              <Link href="/demo" className="btn-primary whitespace-nowrap text-sm py-3 px-6 shadow-lg shadow-brand-500/15 hover:scale-[1.02] active:scale-[0.98] transition-transform">
+                <PlayCircle className="w-4 h-4" />
+                Try the Demo
+              </Link>
+              <Link href="/register" className="btn-secondary whitespace-nowrap text-sm py-3 px-6 border-brand-500/60 bg-transparent text-brand-200 hover:bg-gov-800 hover:text-white hover:scale-[1.02] active:scale-[0.98] transition-transform">
                 Submit Feedback
                 <ChevronRight className="w-4 h-4" />
               </Link>
-              <Link href="/login" className="btn-secondary text-sm py-3 px-6 border-gov-700 bg-transparent text-gov-200 hover:bg-gov-800 hover:text-white hover:scale-[1.02] active:scale-[0.98] transition-transform">
+              <Link href="/login" className="btn-secondary whitespace-nowrap text-sm py-3 px-6 border-gov-700 bg-transparent text-gov-200 hover:bg-gov-800 hover:text-white hover:scale-[1.02] active:scale-[0.98] transition-transform">
                 Sign In
               </Link>
             </div>

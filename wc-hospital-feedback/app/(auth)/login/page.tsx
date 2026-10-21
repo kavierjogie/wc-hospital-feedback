@@ -134,6 +134,12 @@ export default function LoginPage() {
           </button>
         </form>
 
+        <div className="mt-5 pt-5 border-t border-gray-100 text-center">
+          <Link href="/demo" className="btn-secondary w-full">
+            Try the Demo — no sign-up
+          </Link>
+        </div>
+
         <p className="mt-5 text-center text-sm text-gray-500">
           Don&apos;t have an account?{' '}
           <Link href="/register" className="text-gov-700 font-medium hover:underline">

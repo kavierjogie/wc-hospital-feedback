@@ -5,6 +5,11 @@ export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
   const { pathname } = request.nextUrl
 
+  // Demo Mode runs entirely on browser-local sample data: no Supabase calls.
+  if (pathname === '/demo' || pathname.startsWith('/demo/')) {
+    return supabaseResponse
+  }
+
   const isProtectedRoute =
     pathname.startsWith('/feedback') ||
     pathname.startsWith('/my-feedback') ||

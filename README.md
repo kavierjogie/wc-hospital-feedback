@@ -12,6 +12,7 @@ A production-ready, security-hardened web application designed for the Western C
 - [Database Schema & Security (RLS)](#database-schema--security-rls)
 - [AI Analysis & Graceful Degradation](#ai-analysis--graceful-degradation)
 - [Report Generation & Automated Processing](#report-generation--automated-processing)
+- [Demo Mode (no Supabase required)](#demo-mode-no-supabase-required)
 - [Quick Start Guide](#quick-start-guide)
 - [Administrative Page Diagnostics](#administrative-page-diagnostics)
 - [Troubleshooting & Maintenance](#troubleshooting--maintenance)
@@ -152,6 +153,20 @@ The monthly reporting pipeline aggregates regional feedback into a professional 
 - **Manual Generation**: Admins navigate to `/admin/reports`, choose a year and month, and click **Generate & Download PDF**. The authenticated `POST /api/reports/generate` route builds the report on demand and returns it as a PDF download.
 - **Pending Feedback Cron**: Vercel calls `GET /api/cron/process-feedback` daily at 02:00 (`0 2 * * *`). The endpoint requires `Authorization: Bearer <CRON_SECRET>` and uses the service-role Supabase client to update pending records.
 - Report generation is separate from the cron worker. The cron job processes AI analysis and does not email reports.
+
+---
+
+## Demo Mode (no Supabase required)
+
+Visitors can click **Try the Demo** (home page hero, home nav, or login page) to explore the real UI with sample data — no account, no API keys, and no Supabase project needed.
+
+- **Entry / exit:** `/demo` lets you pick the **Patient view** (`/demo/feedback`, `/demo/my-feedback`) or **Admin view** (`/demo/admin/dashboard`, `/demo/admin/feedback`, `/demo/admin/reports`). The amber banner switches views, **Reset demo** restores the sample data, and **Exit demo** returns to the home page. Data is kept when you exit, so re-entering continues where you left off.
+- **Storage:** sample feedback (29 records across 13 hospitals, spread over ~3 months) is seeded into `localStorage` (`wc-hospital-feedback:demo:v1`) on the first visit and never overwritten afterwards except by Reset. Storage is per browser; nothing is sent to a server. If storage is unavailable or corrupted, the demo reseeds and keeps working in memory.
+- **What works:** submitting feedback (same validation as the API), My Submissions, dashboard KPIs and charts, hospital/month filters (URL-based, refresh-safe), search/sentiment/category filtering, and monthly **PDF reports generated in the browser** with the same jsPDF code as the live API.
+- **What is simulated:** Groq AI is replaced by a local keyword scorer (`lib/demo/data.ts`) for sentiment/issue/summary, and report summaries are computed from the stats. Both are labelled as demo output.
+- **Isolation:** `middleware.ts` skips Supabase for `/demo/*`, and demo pages never import the Supabase clients or call `/api/*`, so demo changes can never reach the live database.
+
+Key files: `components/demo/DemoProvider.tsx` (store + banner), `lib/demo/data.ts` (seed, analysis, aggregation), `app/demo/**` (routes), `services/report-core.ts` (shared report aggregation + PDF).
 
 ---
 

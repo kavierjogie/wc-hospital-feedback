@@ -5,9 +5,11 @@ import { FileDown, Loader2, AlertCircle, CheckCircle, FileBarChart } from 'lucid
 
 interface Props {
   months: { value: string; label: string }[]
+  /** Builds the PDF without calling /api/reports/generate (Demo Mode). Throw to show an error. */
+  generate?: (year: number, month: number) => Promise<Blob>
 }
 
-export default function ReportClient({ months }: Props) {
+export default function ReportClient({ months, generate }: Props) {
   const [selectedMonth, setSelectedMonth] = useState(months[1]?.value ?? months[0]?.value ?? '')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -22,21 +24,26 @@ export default function ReportClient({ months }: Props) {
     const [year, month] = selectedMonth.split('-').map(Number)
 
     try {
-      const res = await fetch('/api/reports/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ year, month }),
-      })
+      let blob: Blob
+      if (generate) {
+        blob = await generate(year, month)
+      } else {
+        const res = await fetch('/api/reports/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ year, month }),
+        })
 
-      if (!res.ok) {
-        const json = await res.json()
-        setError(json.error ?? 'Failed to generate report')
-        setLoading(false)
-        return
+        if (!res.ok) {
+          const json = await res.json()
+          setError(json.error ?? 'Failed to generate report')
+          setLoading(false)
+          return
+        }
+
+        // Download the PDF
+        blob = await res.blob()
       }
-
-      // Download the PDF
-      const blob = await res.blob()
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
@@ -49,8 +56,8 @@ export default function ReportClient({ months }: Props) {
       URL.revokeObjectURL(url)
 
       setSuccess(true)
-    } catch {
-      setError('Network error. Please try again.')
+    } catch (err) {
+      setError(generate && err instanceof Error ? err.message : 'Network error. Please try again.')
     }
 
     setLoading(false)

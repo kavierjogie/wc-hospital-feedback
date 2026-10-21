@@ -6,6 +6,7 @@ import { AlertCircle, Send, Info, Sparkles, HeartHandshake, Clock, Activity, Bui
 import type { Hospital, FeedbackCategory } from '@/types/database'
 import { cn } from '@/lib/utils'
 import HospitalCombobox from './HospitalCombobox'
+import type { FeedbackInput } from '@/lib/validation'
 
 const CATEGORIES: FeedbackCategory[] = [
   'Cleanliness',
@@ -45,9 +46,12 @@ const CATEGORY_DETAILS: Record<FeedbackCategory, { icon: React.ComponentType<any
 
 interface Props {
   hospitals: Pick<Hospital, 'id' | 'name' | 'district'>[]
+  /** Replaces the POST to /api/feedback (Demo Mode saves locally). Throw to show an error. */
+  onSubmit?: (input: FeedbackInput) => Promise<void>
+  successHref?: string
 }
 
-export default function FeedbackForm({ hospitals }: Props) {
+export default function FeedbackForm({ hospitals, onSubmit, successHref = '/feedback/success' }: Props) {
   const router = useRouter()
   const [hospitalId, setHospitalId] = useState('')
   const [category, setCategory] = useState<FeedbackCategory | ''>('')
@@ -80,6 +84,17 @@ export default function FeedbackForm({ hospitals }: Props) {
     setFieldErrors({})
     setLoading(true)
 
+    if (onSubmit) {
+      try {
+        await onSubmit({ hospital_id: hospitalId, category: category as FeedbackCategory, comment: comment.trim() })
+        router.push(successHref)
+      } catch (err) {
+        setServerError(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
+        setLoading(false)
+      }
+      return
+    }
+
     try {
       const res = await fetch('/api/feedback', {
         method: 'POST',
@@ -95,7 +110,7 @@ export default function FeedbackForm({ hospitals }: Props) {
         return
       }
 
-      router.push('/feedback/success')
+      router.push(successHref)
     } catch (err) {
       console.error('[Client] feedback submit unexpected error:', err)
       setServerError('Network error. Please check your connection and try again.')
